@@ -1,0 +1,14 @@
+# Virtual environment folder
+venv/
+
+# Python cache folders
+__pycache__/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Mac system file
+.DS_Store
+
+# Optional: ignore large CSVs if not required for submission
+data/*.csv
