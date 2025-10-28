@@ -1,0 +1,6 @@
+{
+  "default_owner": "Student A",
+  "strategy_defaults": {
+    "mean_reversion": {"lookback": 20, "threshold": 0.02}
+  }
+}
