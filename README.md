@@ -10,3 +10,9 @@ python data/data_generator.py
 
 Run tests/notebook:
 python -m notebook
+
+## Running tests
+1. Activate virtual environment: `venv\Scripts\activate` (Windows) or `source venv/bin/activate` (mac/linux)
+2. Install dependencies: `python -m pip install -r requirements.txt`
+3. Run the test suite: `python -m pytest -q`
+
