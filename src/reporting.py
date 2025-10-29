@@ -1,45 +1,104 @@
-# src/reporting.py
+"""
+reporting.py
+-------------
+Handles performance computation and reporting for the trading backtester.
+Includes equity curve, total return, and Sharpe ratio calculations.
+"""
+
 import pandas as pd
 import numpy as np
 
-def compute_equity_curve(trades: list, starting_cash: float = 0.0):
+
+def compute_equity_curve(executions, initial_capital=0.0):
     """
-    trades: list of dicts with keys: timestamp, symbol, side, qty, price
-    returns: pandas.Series index=timestamp -> equity (cumulative P&L + starting cash)
-    This is a simplified P&L runner assuming immediate execution and no slippage.
+    Build an equity curve (cumulative portfolio value over time)
+    from a list of executed trades.
+
+    Parameters
+    ----------
+    executions : list[dict]
+        List of executed trades, each containing 'timestamp', 'price', and 'qty'.
+    initial_capital : float, optional
+        Starting capital value. Default is 0.0.
+
+    Returns
+    -------
+    pd.Series
+        Pandas Series indexed by timestamp, representing cumulative equity value.
     """
-    if not trades:
+    if not executions:
         return pd.Series(dtype=float)
 
-    # build DataFrame
-    df = pd.DataFrame(trades)
-    # compute trade pnl: BUY reduces cash (negative), SELL increases cash (positive)
-    df['signed'] = df['qty'].where(df['side']=='SELL', -df['qty'])
-    df['cash_flow'] = -df['signed'] * df['price'] * -1  # simplified: BUY reduces cash
-    # Actually: We'll compute cumulative cash by treating BUY as negative cash, SELL positive
-    df['cash_effect'] = df.apply(lambda r: -r['qty']*r['price'] if r['side']=='BUY' else r['qty']*r['price'], axis=1)
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df = df.sort_values('timestamp').set_index('timestamp')
-    equity = df['cash_effect'].cumsum() + starting_cash
-    return equity
+    df = pd.DataFrame(executions)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["trade_value"] = df["price"] * df["qty"]
+    df["cum_value"] = df["trade_value"].cumsum() + initial_capital
+    df.set_index("timestamp", inplace=True)
 
-def total_return_from_equity(equity: pd.Series):
-    if equity.empty:
-        return 0.0
-    start = equity.iloc[0]
-    end = equity.iloc[-1]
-    if start == 0:
-        # If starting cash =0, return absolute change
-        return float(end)
-    return float((end - start) / abs(start) * 100.0)
+    return df["cum_value"]
 
-def sharpe_ratio_from_returns(equity: pd.Series, periods_per_year: int = 252):
-    if equity.empty or len(equity) < 2:
+
+def total_return_from_equity(equity_series: pd.Series) -> float:
+    """
+    Calculate total return as (final_value / initial_value - 1).
+
+    Parameters
+    ----------
+    equity_series : pd.Series
+        Series of portfolio values over time.
+
+    Returns
+    -------
+    float
+        Total return (e.g. 0.05 = 5%)
+    """
+    if equity_series.empty or equity_series.iloc[0] == 0:
         return 0.0
-    rets = equity.pct_change().dropna()
-    mean = rets.mean()
-    std = rets.std()
-    if std == 0 or np.isnan(std):
+
+    initial_val = equity_series.iloc[0]
+    final_val = equity_series.iloc[-1]
+    return (final_val / initial_val) - 1.0
+
+
+def sharpe_ratio_from_returns(equity_series: pd.Series, risk_free_rate: float = 0.0) -> float:
+    """
+    Compute annualized Sharpe ratio from daily equity curve.
+
+    Parameters
+    ----------
+    equity_series : pd.Series
+        Portfolio equity values indexed by time.
+    risk_free_rate : float
+        Annual risk-free rate, default = 0.0
+
+    Returns
+    -------
+    float
+        Sharpe ratio.
+    """
+    if equity_series.empty or len(equity_series) < 2:
         return 0.0
-    sharpe = (mean / std) * (periods_per_year ** 0.5)
-    return float(sharpe)
+
+    # Compute periodic returns
+    returns = equity_series.pct_change().dropna()
+    if returns.std() == 0:
+        return 0.0
+
+    excess = returns - risk_free_rate / len(returns)
+    sharpe = np.sqrt(252) * excess.mean() / excess.std()
+    return round(float(sharpe), 2)
+
+
+def export_equity_to_csv(equity_series: pd.Series, filename: str = "data/equity_curve.csv"):
+    """
+    Export equity curve to a CSV file for inspection.
+
+    Parameters
+    ----------
+    equity_series : pd.Series
+        Equity curve data.
+    filename : str
+        Output CSV file path.
+    """
+    equity_series.to_csv(filename, header=["equity"])
+    print(f"✅ Equity curve exported to {filename}")
